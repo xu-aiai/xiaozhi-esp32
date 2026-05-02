@@ -261,6 +261,9 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
 
     cJSON* emoji_collection = cJSON_GetObjectItem(root, "emoji_collection");
     if (cJSON_IsArray(emoji_collection)) {
+#if CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
+        ESP_LOGI(TAG, "Keep firmware built-in custom GIF emoji collection; skip assets emoji_collection override");
+#else
         auto custom_emoji_collection = std::make_shared<EmojiCollection>();
         int emoji_count = cJSON_GetArraySize(emoji_collection);
         for (int i = 0; i < emoji_count; i++) {
@@ -284,6 +287,7 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
         if (dark_theme != nullptr) {
             dark_theme->set_emoji_collection(custom_emoji_collection);
         }
+#endif
     }
 
     cJSON* skin = cJSON_GetObjectItem(root, "skin");
@@ -301,12 +305,16 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
                 light_theme->set_chat_background_color(LvglTheme::ParseColor(background_color->valuestring));
             }
             if (cJSON_IsString(background_image)) {
+#if CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
+                ESP_LOGI(TAG, "Keep firmware built-in custom light background; skip assets background override");
+#else
                 if (!assets->GetAssetData(background_image->valuestring, ptr, size)) {
                     ESP_LOGE(TAG, "The background image file %s is not found", background_image->valuestring);
                     return false;
                 }
                 auto background_image = std::make_shared<LvglCBinImage>(ptr);
                 light_theme->set_background_image(background_image);
+#endif
             }
         }
         cJSON* dark_skin = cJSON_GetObjectItem(skin, "dark");
@@ -322,12 +330,16 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
                 dark_theme->set_chat_background_color(LvglTheme::ParseColor(background_color->valuestring));
             }
             if (cJSON_IsString(background_image)) {
+#if CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
+                ESP_LOGI(TAG, "Keep firmware built-in custom dark background; skip assets background override");
+#else
                 if (!assets->GetAssetData(background_image->valuestring, ptr, size)) {
                     ESP_LOGE(TAG, "The background image file %s is not found", background_image->valuestring);
                     return false;
                 }
                 auto background_image = std::make_shared<LvglCBinImage>(ptr);
                 dark_theme->set_background_image(background_image);
+#endif
             }
         }
     }

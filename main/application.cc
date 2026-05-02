@@ -65,6 +65,13 @@ void Application::Initialize() {
     // Setup the display
     auto display = board.GetDisplay();
     display->SetupUI();
+#if CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
+    // 10.1 寸 MIPI 屏先完成首帧 UI 刷新，再打开背光，避免用户看到白屏逐步刷新。
+    vTaskDelay(pdMS_TO_TICKS(150));
+    if (auto backlight = board.GetBacklight()) {
+        backlight->RestoreBrightness();
+    }
+#endif
     // Print board name/version info
     display->SetChatMessage("system", SystemInfo::GetUserAgent().c_str());
 
@@ -1113,4 +1120,3 @@ void Application::ResetProtocol() {
         protocol_.reset();
     });
 }
-

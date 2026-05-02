@@ -90,7 +90,7 @@ private:
             .num_data_lanes = 2,
             .lane_bit_rate_mbps = LCD_MIPI_DSI_LANE_BITRATE_MBPS,
         };
-        esp_lcd_new_dsi_bus(&bus_config, &mipi_dsi_bus);
+        ESP_ERROR_CHECK(esp_lcd_new_dsi_bus(&bus_config, &mipi_dsi_bus));
 
         ESP_LOGI(TAG, "Install MIPI DSI LCD control panel");
         // we use DBI interface to send LCD commands and parameters
@@ -99,7 +99,7 @@ private:
             .lcd_cmd_bits = 8,
             .lcd_param_bits = 8,
         };
-        esp_lcd_new_panel_io_dbi(mipi_dsi_bus, &dbi_config, &io);
+        ESP_ERROR_CHECK(esp_lcd_new_panel_io_dbi(mipi_dsi_bus, &dbi_config, &io));
 #if CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4B
         esp_lcd_dpi_panel_config_t dpi_config = {
             .dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
@@ -250,10 +250,13 @@ private:
         };
         esp_lcd_new_panel_jd9365(io, &lcd_dev_config, &disp_panel);
 #elif CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_8    || CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
-    esp_lcd_dpi_panel_config_t dpi_config = {
+        esp_lcd_dpi_panel_config_t dpi_config = {
+            .virtual_channel = 0,
             .dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
-            .dpi_clock_freq_mhz = 52,
+            .dpi_clock_freq_mhz = 80,
             .pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB565,
+            .in_color_format = LCD_COLOR_FMT_RGB565,
+            .out_color_format = LCD_COLOR_FMT_RGB565,
             .num_fbs = 1,
             .video_timing = {
                 .h_size = DISPLAY_WIDTH,
@@ -262,11 +265,11 @@ private:
                 .hsync_back_porch = 20,
                 .hsync_front_porch = 40,
                 .vsync_pulse_width = 4,
-                .vsync_back_porch = 10,
+                .vsync_back_porch = 12,
                 .vsync_front_porch = 30,
             },
             .flags = {
-                .use_dma2d = true,
+                .use_dma2d = false,
             },
         };
         jd9365_vendor_config_t vendor_config = {
@@ -285,7 +288,7 @@ private:
             .bits_per_pixel = 16,
             .vendor_config = &vendor_config,
         };
-        esp_lcd_new_panel_jd9365(io, &lcd_dev_config, &disp_panel);
+        ESP_ERROR_CHECK(esp_lcd_new_panel_jd9365(io, &lcd_dev_config, &disp_panel));
 #elif CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_7
     esp_lcd_dpi_panel_config_t dpi_config = {
             .dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
@@ -324,8 +327,8 @@ private:
         };
         esp_lcd_new_panel_ili9881c(io, &lcd_dev_config, &disp_panel);
 #endif
-        esp_lcd_panel_reset(disp_panel);
-        esp_lcd_panel_init(disp_panel);
+        ESP_ERROR_CHECK(esp_lcd_panel_reset(disp_panel));
+        ESP_ERROR_CHECK(esp_lcd_panel_init(disp_panel));
 
         display_ = new MipiLcdDisplay(io, disp_panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -420,7 +423,9 @@ public:
         InitializeTouch();
         InitializeCamera();
         InitializeButtons();
+#if !CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
         GetBacklight()->RestoreBrightness();
+#endif
     }
 
     virtual AudioCodec* GetAudioCodec() override {
