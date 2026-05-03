@@ -12,7 +12,6 @@
 #include <esp_err.h>
 #include <esp_lvgl_port.h>
 #include <esp_psram.h>
-#include <cstring>
 #include <src/misc/cache/lv_cache.h>
 
 #include "board.h"
@@ -23,56 +22,14 @@ LV_FONT_DECLARE(BUILTIN_TEXT_FONT);
 LV_FONT_DECLARE(BUILTIN_ICON_FONT);
 LV_FONT_DECLARE(font_awesome_30_4);
 
-extern "C" const uint8_t xiaozhi_custom_background_rgb565_start[] asm("xiaozhi_custom_background_rgb565_start");
-extern "C" const uint8_t xiaozhi_custom_background_rgb565_end[] asm("xiaozhi_custom_background_rgb565_end");
-extern "C" const uint8_t xiaozhi_custom_button_gif_start[] asm("xiaozhi_custom_button_gif_start");
-extern "C" const uint8_t xiaozhi_custom_button_gif_end[] asm("xiaozhi_custom_button_gif_end");
-
 namespace {
-constexpr uint32_t kCustomEmojiScale = LV_SCALE_NONE / 2;
+constexpr uint32_t kCustomEmojiScale = LV_SCALE_NONE;
 constexpr uint32_t kCustomBackgroundOverscanScale = 4;
-constexpr int kCustomBackgroundWidth = 400;
-constexpr int kCustomBackgroundHeight = 640;
-
-std::shared_ptr<LvglImage> CreateCustomBackgroundImage() {
-    const auto size = static_cast<size_t>(xiaozhi_custom_background_rgb565_end - xiaozhi_custom_background_rgb565_start);
-    static lv_img_dsc_t image_dsc;
-    static bool initialized = false;
-    if (!initialized) {
-        memset(&image_dsc, 0, sizeof(image_dsc));
-        image_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
-        image_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
-        image_dsc.header.w = kCustomBackgroundWidth;
-        image_dsc.header.h = kCustomBackgroundHeight;
-        image_dsc.data_size = size;
-        image_dsc.data = xiaozhi_custom_background_rgb565_start;
-        initialized = true;
-        ESP_LOGI(TAG, "Custom RGB565 background loaded: %dx%d data_size=%u",
-                 kCustomBackgroundWidth, kCustomBackgroundHeight, static_cast<unsigned>(size));
-    }
-    return std::make_shared<LvglSourceImage>(&image_dsc);
-}
-
-std::shared_ptr<EmojiCollection> CreateCustomGifEmojiCollection() {
-    auto collection = std::make_shared<EmojiCollection>();
-    const auto gif_size = static_cast<size_t>(xiaozhi_custom_button_gif_end - xiaozhi_custom_button_gif_start);
-    ESP_LOGI(TAG, "Custom GIF emoji loaded: size=%u signature=%c%c%c",
-             static_cast<unsigned>(gif_size),
-             xiaozhi_custom_button_gif_start[0],
-             xiaozhi_custom_button_gif_start[1],
-             xiaozhi_custom_button_gif_start[2]);
-    constexpr std::array<const char*, 28> emotion_names = {
-        "neutral", "happy", "laughing", "funny", "sad", "angry", "crying", "loving",
-        "embarrassed", "surprised", "shocked", "thinking", "winking", "cool", "relaxed",
-        "delicious", "kissy", "confident", "sleepy", "silly", "confused", "gear", "search",
-        "microchip_ai", "listening", "speaking", "connecting", "idle"
-    };
-
-    for (const auto* name : emotion_names) {
-        collection->AddEmoji(name, new LvglRawImage((void*)xiaozhi_custom_button_gif_start, gif_size));
-    }
-    return collection;
-}
+constexpr int kCustomEmojiWidth = 360;
+constexpr int kCustomEmojiHeight = 360;
+constexpr int kChatPanelWidthPercent = 88;
+constexpr int kChatPanelHeightPercent = 16;
+constexpr int kChatPanelBottomMarginPercent = 6;
 
 void ApplyFullscreenBackground(lv_obj_t* image_obj, const LvglImage* image, int screen_w, int screen_h) {
     if (image_obj == nullptr) {
@@ -108,14 +65,38 @@ void ApplyCustomEmojiScale(lv_obj_t* image_obj) {
     }
 }
 
+void PositionCustomEmojiBox(lv_obj_t* emoji_box, int screen_w, int screen_h) {
+    if (emoji_box == nullptr) {
+        return;
+    }
+
+    const int max_width = screen_w * 54 / 100;
+    const int max_height = screen_h * 52 / 100;
+    const int scale = std::min(max_width * 100 / kCustomEmojiWidth,
+                               max_height * 100 / kCustomEmojiHeight);
+    lv_obj_set_size(emoji_box,
+                    kCustomEmojiWidth * scale / 100,
+                    kCustomEmojiHeight * scale / 100);
+    lv_obj_align(emoji_box, LV_ALIGN_CENTER, 0, 0);
+}
+
+void PositionCustomChatPanel(lv_obj_t* panel, int screen_w, int screen_h) {
+    if (panel == nullptr) {
+        return;
+    }
+
+    lv_obj_set_size(panel,
+                    screen_w * kChatPanelWidthPercent / 100,
+                    screen_h * kChatPanelHeightPercent / 100);
+    lv_obj_align(panel, LV_ALIGN_BOTTOM_MID, 0, -screen_h * kChatPanelBottomMarginPercent / 100);
+}
+
 } // namespace
 
 void LcdDisplay::InitializeLcdThemes() {
     auto text_font = std::make_shared<LvglBuiltInFont>(&BUILTIN_TEXT_FONT);
     auto icon_font = std::make_shared<LvglBuiltInFont>(&BUILTIN_ICON_FONT);
     auto large_icon_font = std::make_shared<LvglBuiltInFont>(&font_awesome_30_4);
-    auto custom_background = CreateCustomBackgroundImage();
-    auto custom_emojis = CreateCustomGifEmojiCollection();
 
     // light theme
     auto light_theme = new LvglTheme("light");
@@ -131,8 +112,6 @@ void LcdDisplay::InitializeLcdThemes() {
     light_theme->set_text_font(text_font);
     light_theme->set_icon_font(icon_font);
     light_theme->set_large_icon_font(large_icon_font);
-    light_theme->set_background_image(custom_background);
-    light_theme->set_emoji_collection(custom_emojis);
 
     // dark theme
     auto dark_theme = new LvglTheme("dark");
@@ -148,8 +127,6 @@ void LcdDisplay::InitializeLcdThemes() {
     dark_theme->set_text_font(text_font);
     dark_theme->set_icon_font(icon_font);
     dark_theme->set_large_icon_font(large_icon_font);
-    dark_theme->set_background_image(custom_background);
-    dark_theme->set_emoji_collection(custom_emojis);
 
     auto& theme_manager = LvglThemeManager::GetInstance();
     theme_manager.RegisterTheme("light", light_theme);
@@ -938,11 +915,10 @@ void LcdDisplay::SetupUI() {
 
     /* Bottom layer: emoji_box_ - centered display */
     emoji_box_ = lv_obj_create(screen);
-    lv_obj_set_size(emoji_box_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    PositionCustomEmojiBox(emoji_box_, width_, height_);
     lv_obj_set_style_bg_opa(emoji_box_, LV_OPA_TRANSP, 0);
     lv_obj_set_style_pad_all(emoji_box_, 0, 0);
     lv_obj_set_style_border_width(emoji_box_, 0, 0);
-    lv_obj_align(emoji_box_, LV_ALIGN_CENTER, 0, -lvgl_theme->spacing(40));
 
     emoji_label_ = lv_label_create(emoji_box_);
     lv_obj_set_style_text_font(emoji_label_, large_icon_font, 0);
@@ -1060,31 +1036,32 @@ void LcdDisplay::SetupUI() {
     lv_obj_align(status_label_, LV_ALIGN_CENTER, 0, 0);
 
 #if CONFIG_USE_MULTILINE_CHAT_MESSAGE
-    /* Bottom bar - auto height, grows upward with wrapped text */
+    /* Bottom chat panel: fixed inside the lower framed area of the custom background. */
     bottom_bar_ = lv_obj_create(screen);
-    lv_obj_set_width(bottom_bar_, LV_HOR_RES);
-    lv_obj_set_height(bottom_bar_, LV_SIZE_CONTENT);
-    lv_obj_set_style_radius(bottom_bar_, 0, 0);
-    lv_obj_set_style_bg_opa(bottom_bar_, LV_OPA_TRANSP, 0);
+    PositionCustomChatPanel(bottom_bar_, width_, height_);
+    lv_obj_set_style_radius(bottom_bar_, lvgl_theme->spacing(12), 0);
+    lv_obj_set_style_bg_color(bottom_bar_, lv_color_hex(0x042A68), 0);
+    lv_obj_set_style_bg_opa(bottom_bar_, LV_OPA_30, 0);
     lv_obj_set_style_text_color(bottom_bar_, lvgl_theme->text_color(), 0);
-    lv_obj_set_style_pad_all(bottom_bar_, lvgl_theme->spacing(2), 0);
-    lv_obj_set_style_border_width(bottom_bar_, 0, 0);
+    lv_obj_set_style_pad_all(bottom_bar_, lvgl_theme->spacing(16), 0);
+    lv_obj_set_style_border_width(bottom_bar_, 1, 0);
+    lv_obj_set_style_border_color(bottom_bar_, lv_color_hex(0x24B8FF), 0);
+    lv_obj_set_style_border_opa(bottom_bar_, LV_OPA_60, 0);
     lv_obj_set_scrollbar_mode(bottom_bar_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_align_to(bottom_bar_, emoji_box_, LV_ALIGN_OUT_BOTTOM_MID, 0, lvgl_theme->spacing(8));
 
     chat_message_shadow_label_ = lv_label_create(bottom_bar_);
     lv_label_set_text(chat_message_shadow_label_, "");
-    lv_obj_set_width(chat_message_shadow_label_, LV_HOR_RES - lvgl_theme->spacing(12));
+    lv_obj_set_width(chat_message_shadow_label_, width_ * kChatPanelWidthPercent / 100 - lvgl_theme->spacing(32));
     lv_label_set_long_mode(chat_message_shadow_label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(chat_message_shadow_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(chat_message_shadow_label_, lv_color_hex(0x061B30), 0);
-    lv_obj_set_style_text_opa(chat_message_shadow_label_, LV_OPA_80, 0);
+    lv_obj_set_style_text_opa(chat_message_shadow_label_, LV_OPA_90, 0);
     lv_obj_align(chat_message_shadow_label_, LV_ALIGN_CENTER, 1, 2);
 
-    /* chat_message_label_ placed in bottom_bar_, multiline wrapped display */
+    /* chat_message_label_ placed in the lower framed area, multiline wrapped display */
     chat_message_label_ = lv_label_create(bottom_bar_);
     lv_label_set_text(chat_message_label_, "");
-    lv_obj_set_width(chat_message_label_, LV_HOR_RES - lvgl_theme->spacing(12));
+    lv_obj_set_width(chat_message_label_, width_ * kChatPanelWidthPercent / 100 - lvgl_theme->spacing(32));
     lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(chat_message_label_, lvgl_theme->text_color(), 0);
@@ -1208,8 +1185,7 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
     }
 #if CONFIG_USE_MULTILINE_CHAT_MESSAGE
     if (bottom_bar_ != nullptr) {
-        auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
-        lv_obj_align_to(bottom_bar_, emoji_box_, LV_ALIGN_OUT_BOTTOM_MID, 0, lvgl_theme->spacing(8));
+        PositionCustomChatPanel(bottom_bar_, width_, height_);
     }
 #endif
 }
@@ -1299,9 +1275,10 @@ void LcdDisplay::SetEmotion(const char* emotion) {
     }
 
     if (bottom_bar_ != nullptr && emoji_box_ != nullptr) {
-        auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
-        lv_obj_update_layout(emoji_box_);
-        lv_obj_align_to(bottom_bar_, emoji_box_, LV_ALIGN_OUT_BOTTOM_MID, 0, lvgl_theme->spacing(8));
+        PositionCustomChatPanel(bottom_bar_, width_, height_);
+    }
+    if (emoji_box_ != nullptr) {
+        PositionCustomEmojiBox(emoji_box_, width_, height_);
     }
 
 #if CONFIG_USE_WECHAT_MESSAGE_STYLE

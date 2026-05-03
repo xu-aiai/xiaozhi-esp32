@@ -234,6 +234,15 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
         "scare": ["surprised", "shocked"],
         "buxue": ["thinking", "confused", "embarrassed"]
     }
+
+    # A project-local custom GIF named default_emoji.gif is treated as the
+    # default visual for every emotion while still being stored in assets.bin.
+    custom_default_emoji_aliases = [
+        "neutral", "happy", "laughing", "funny", "sad", "angry", "crying", "loving",
+        "embarrassed", "surprised", "shocked", "thinking", "winking", "cool", "relaxed",
+        "delicious", "kissy", "confident", "sleepy", "silly", "confused", "gear", "search",
+        "microchip_ai", "listening", "speaking", "connecting", "idle"
+    ]
     
     # Copy each image from input directory to build/assets directory
     for root, dirs, files in os.walk(emoji_collection_dir):
@@ -259,6 +268,13 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
                                 "name": alias,
                                 "file": file
                             })
+                    elif filename_without_ext == "default_emoji":
+                        for alias in custom_default_emoji_aliases:
+                            if alias != filename_without_ext:
+                                emoji_list.append({
+                                    "name": alias,
+                                    "file": file
+                                })
     
     return emoji_list
 
@@ -310,6 +326,15 @@ def generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra
     
     if extra_files:
         index_data["extra_files"] = extra_files
+        if "xcmg_background.rgb565" in extra_files:
+            index_data["skin"] = {
+                "light": {
+                    "background_image": "xcmg_background.rgb565"
+                },
+                "dark": {
+                    "background_image": "xcmg_background.rgb565"
+                }
+            }
     
     if multinet_model_info:
         index_data["multinet_model"] = multinet_model_info
@@ -718,6 +743,9 @@ def get_emoji_collection_path(default_emoji_collection, xiaozhi_fonts_path, proj
     """
     if not default_emoji_collection:
         return None
+
+    if os.path.isdir(default_emoji_collection):
+        return default_emoji_collection
     
     # Special handling for otto-gif collection
     if default_emoji_collection == 'otto-gif':

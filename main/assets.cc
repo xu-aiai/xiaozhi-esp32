@@ -14,10 +14,45 @@
 #include <esp_timer.h>
 #include <esp_heap_caps.h>
 #include <cbin_font.h>
+#include <cstring>
 
 
 #define TAG "Assets"
 #define PARTITION_LABEL "assets"
+
+#if HAVE_LVGL
+namespace {
+constexpr int kCustomBackgroundWidth = 400;
+constexpr int kCustomBackgroundHeight = 640;
+
+bool EndsWith(const std::string& value, const char* suffix) {
+    const auto suffix_len = strlen(suffix);
+    return value.size() >= suffix_len &&
+           value.compare(value.size() - suffix_len, suffix_len, suffix) == 0;
+}
+
+std::shared_ptr<LvglImage> CreateRgb565BackgroundImage(void* ptr, size_t size) {
+    static lv_img_dsc_t image_dsc;
+    memset(&image_dsc, 0, sizeof(image_dsc));
+    image_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+    image_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+    image_dsc.header.w = kCustomBackgroundWidth;
+    image_dsc.header.h = kCustomBackgroundHeight;
+    image_dsc.data_size = size;
+    image_dsc.data = static_cast<const uint8_t*>(ptr);
+    ESP_LOGI(TAG, "Assets RGB565 background loaded: %dx%d data_size=%u",
+             kCustomBackgroundWidth, kCustomBackgroundHeight, static_cast<unsigned>(size));
+    return std::make_shared<LvglSourceImage>(&image_dsc);
+}
+
+std::shared_ptr<LvglImage> CreateBackgroundImageFromAsset(const std::string& file, void* ptr, size_t size) {
+    if (EndsWith(file, ".rgb565")) {
+        return CreateRgb565BackgroundImage(ptr, size);
+    }
+    return std::make_shared<LvglCBinImage>(ptr);
+}
+} // namespace
+#endif
 
 struct mmap_assets_table {
     char asset_name[32];          /*!< Name of the asset */
@@ -261,9 +296,6 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
 
     cJSON* emoji_collection = cJSON_GetObjectItem(root, "emoji_collection");
     if (cJSON_IsArray(emoji_collection)) {
-#if CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
-        ESP_LOGI(TAG, "Keep firmware built-in custom GIF emoji collection; skip assets emoji_collection override");
-#else
         auto custom_emoji_collection = std::make_shared<EmojiCollection>();
         int emoji_count = cJSON_GetArraySize(emoji_collection);
         for (int i = 0; i < emoji_count; i++) {
@@ -287,7 +319,6 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
         if (dark_theme != nullptr) {
             dark_theme->set_emoji_collection(custom_emoji_collection);
         }
-#endif
     }
 
     cJSON* skin = cJSON_GetObjectItem(root, "skin");
@@ -305,16 +336,12 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
                 light_theme->set_chat_background_color(LvglTheme::ParseColor(background_color->valuestring));
             }
             if (cJSON_IsString(background_image)) {
-#if CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
-                ESP_LOGI(TAG, "Keep firmware built-in custom light background; skip assets background override");
-#else
                 if (!assets->GetAssetData(background_image->valuestring, ptr, size)) {
                     ESP_LOGE(TAG, "The background image file %s is not found", background_image->valuestring);
                     return false;
                 }
-                auto background_image = std::make_shared<LvglCBinImage>(ptr);
-                light_theme->set_background_image(background_image);
-#endif
+                auto background = CreateBackgroundImageFromAsset(background_image->valuestring, ptr, size);
+                light_theme->set_background_image(background);
             }
         }
         cJSON* dark_skin = cJSON_GetObjectItem(skin, "dark");
@@ -330,16 +357,12 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
                 dark_theme->set_chat_background_color(LvglTheme::ParseColor(background_color->valuestring));
             }
             if (cJSON_IsString(background_image)) {
-#if CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
-                ESP_LOGI(TAG, "Keep firmware built-in custom dark background; skip assets background override");
-#else
                 if (!assets->GetAssetData(background_image->valuestring, ptr, size)) {
                     ESP_LOGE(TAG, "The background image file %s is not found", background_image->valuestring);
                     return false;
                 }
-                auto background_image = std::make_shared<LvglCBinImage>(ptr);
-                dark_theme->set_background_image(background_image);
-#endif
+                auto background = CreateBackgroundImageFromAsset(background_image->valuestring, ptr, size);
+                dark_theme->set_background_image(background);
             }
         }
     }
