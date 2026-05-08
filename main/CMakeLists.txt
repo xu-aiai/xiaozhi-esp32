@@ -508,7 +508,8 @@ elseif(CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1)
     set(BUILTIN_TEXT_FONT font_puhui_basic_30_4)
     set(BUILTIN_ICON_FONT font_awesome_30_4)
     set(DEFAULT_EMOJI_COLLECTION "${CMAKE_CURRENT_SOURCE_DIR}/assets/custom/emoji_collection")
-    set(DEFAULT_ASSETS_EXTRA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/custom/background")
+    set(DEFAULT_LIGHT_ASSETS_EXTRA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/custom/light/background")
+    set(DEFAULT_DARK_ASSETS_EXTRA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/custom/dark/background")
 elseif(CONFIG_BOARD_TYPE_ESP_P4_FUNCTION_EV_BOARD)
     set(BOARD_TYPE "esp-p4-function-ev-board")
 elseif(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD)
@@ -1090,8 +1091,28 @@ function(build_default_assets_bin)
         list(APPEND BUILD_ARGS "--extra_files" "${DEFAULT_ASSETS_EXTRA_FILES}")
     endif()
 
-    list(APPEND BUILD_ARGS "--esp_sr_model_path" "${ESP_SR_MODEL_PATH}")
-    list(APPEND BUILD_ARGS "--xiaozhi_fonts_path" "${XIAOZHI_FONTS_PATH}")
+    if(DEFAULT_LIGHT_EMOJI_COLLECTION)
+        list(APPEND BUILD_ARGS "--light_emoji_collection" "${DEFAULT_LIGHT_EMOJI_COLLECTION}")
+    endif()
+
+    if(DEFAULT_DARK_EMOJI_COLLECTION)
+        list(APPEND BUILD_ARGS "--dark_emoji_collection" "${DEFAULT_DARK_EMOJI_COLLECTION}")
+    endif()
+
+    if(DEFAULT_LIGHT_ASSETS_EXTRA_FILES)
+        list(APPEND BUILD_ARGS "--light_extra_files" "${DEFAULT_LIGHT_ASSETS_EXTRA_FILES}")
+    endif()
+
+    if(DEFAULT_DARK_ASSETS_EXTRA_FILES)
+        list(APPEND BUILD_ARGS "--dark_extra_files" "${DEFAULT_DARK_ASSETS_EXTRA_FILES}")
+    endif()
+
+    if(ESP_SR_MODEL_PATH)
+        list(APPEND BUILD_ARGS "--esp_sr_model_path" "${ESP_SR_MODEL_PATH}")
+    endif()
+    if(XIAOZHI_FONTS_PATH)
+        list(APPEND BUILD_ARGS "--xiaozhi_fonts_path" "${XIAOZHI_FONTS_PATH}")
+    endif()
 
     # Create custom command to build assets
     add_custom_command(

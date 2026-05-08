@@ -48,6 +48,9 @@ std::string Ota::GetCheckVersionUrl() {
     std::string url = settings.GetString("ota_url");
     if (url.empty()) {
         url = CONFIG_OTA_URL;
+        ESP_LOGI(TAG, "OTA check URL uses build default: %s", url.c_str());
+    } else {
+        ESP_LOGI(TAG, "OTA check URL uses NVS wifi/ota_url: %s", url.c_str());
     }
     return url;
 }

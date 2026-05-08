@@ -868,6 +868,7 @@ void Application::HandleStateChangedEvent() {
     switch (new_state) {
         case kDeviceStateUnknown:
         case kDeviceStateIdle:
+            display->SetEmotionAnimationPaused(false);
             display->SetStatus(Lang::Strings::STANDBY);
             display->ClearChatMessages();  // Clear messages first
             display->SetEmotion("neutral"); // Then set emotion (wechat mode checks child count)
@@ -875,11 +876,13 @@ void Application::HandleStateChangedEvent() {
             audio_service_.EnableWakeWordDetection(true);
             break;
         case kDeviceStateConnecting:
+            display->SetEmotionAnimationPaused(false);
             display->SetStatus(Lang::Strings::CONNECTING);
             display->SetEmotion("neutral");
             display->SetChatMessage("system", "");
             break;
         case kDeviceStateListening:
+            display->SetEmotionAnimationPaused(false);
             display->SetStatus(Lang::Strings::LISTENING);
             display->SetEmotion("neutral");
 
@@ -911,6 +914,7 @@ void Application::HandleStateChangedEvent() {
             }
             break;
         case kDeviceStateSpeaking:
+            display->SetEmotionAnimationPaused(true);
             display->SetStatus(Lang::Strings::SPEAKING);
 
             if (listening_mode_ != kListeningModeRealtime) {
@@ -952,7 +956,14 @@ void Application::SetListeningMode(ListeningMode mode) {
 }
 
 ListeningMode Application::GetDefaultListeningMode() const {
-    return aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime;
+    if (aec_mode_ == kAecOff) {
+        return kListeningModeAutoStop;
+    }
+    auto codec = Board::GetInstance().GetAudioCodec();
+    if (aec_mode_ == kAecOnDeviceSide && (codec == nullptr || !codec->input_reference())) {
+        return kListeningModeAutoStop;
+    }
+    return kListeningModeRealtime;
 }
 
 void Application::Reboot() {

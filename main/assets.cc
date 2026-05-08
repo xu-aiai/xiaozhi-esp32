@@ -25,6 +25,26 @@ namespace {
 constexpr int kCustomBackgroundWidth = 400;
 constexpr int kCustomBackgroundHeight = 640;
 
+class Rgb565BackgroundImage : public LvglImage {
+public:
+    Rgb565BackgroundImage(void* ptr, size_t size) {
+        memset(&image_dsc_, 0, sizeof(image_dsc_));
+        image_dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
+        image_dsc_.header.cf = LV_COLOR_FORMAT_RGB565;
+        image_dsc_.header.w = kCustomBackgroundWidth;
+        image_dsc_.header.h = kCustomBackgroundHeight;
+        image_dsc_.data_size = size;
+        image_dsc_.data = static_cast<const uint8_t*>(ptr);
+    }
+
+    const lv_img_dsc_t* image_dsc() const override {
+        return &image_dsc_;
+    }
+
+private:
+    lv_img_dsc_t image_dsc_;
+};
+
 bool EndsWith(const std::string& value, const char* suffix) {
     const auto suffix_len = strlen(suffix);
     return value.size() >= suffix_len &&
@@ -32,17 +52,9 @@ bool EndsWith(const std::string& value, const char* suffix) {
 }
 
 std::shared_ptr<LvglImage> CreateRgb565BackgroundImage(void* ptr, size_t size) {
-    static lv_img_dsc_t image_dsc;
-    memset(&image_dsc, 0, sizeof(image_dsc));
-    image_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
-    image_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
-    image_dsc.header.w = kCustomBackgroundWidth;
-    image_dsc.header.h = kCustomBackgroundHeight;
-    image_dsc.data_size = size;
-    image_dsc.data = static_cast<const uint8_t*>(ptr);
     ESP_LOGI(TAG, "Assets RGB565 background loaded: %dx%d data_size=%u",
              kCustomBackgroundWidth, kCustomBackgroundHeight, static_cast<unsigned>(size));
-    return std::make_shared<LvglSourceImage>(&image_dsc);
+    return std::make_shared<Rgb565BackgroundImage>(ptr, size);
 }
 
 std::shared_ptr<LvglImage> CreateBackgroundImageFromAsset(const std::string& file, void* ptr, size_t size) {
@@ -50,6 +62,67 @@ std::shared_ptr<LvglImage> CreateBackgroundImageFromAsset(const std::string& fil
         return CreateRgb565BackgroundImage(ptr, size);
     }
     return std::make_shared<LvglCBinImage>(ptr);
+}
+
+std::shared_ptr<EmojiCollection> LoadEmojiCollectionFromIndex(Assets* assets, cJSON* emoji_collection) {
+    if (!cJSON_IsArray(emoji_collection)) {
+        return nullptr;
+    }
+
+    void* ptr = nullptr;
+    size_t size = 0;
+    auto custom_emoji_collection = std::make_shared<EmojiCollection>();
+    int emoji_count = cJSON_GetArraySize(emoji_collection);
+    for (int i = 0; i < emoji_count; i++) {
+        cJSON* emoji = cJSON_GetArrayItem(emoji_collection, i);
+        if (cJSON_IsObject(emoji)) {
+            cJSON* name = cJSON_GetObjectItem(emoji, "name");
+            cJSON* file = cJSON_GetObjectItem(emoji, "file");
+            cJSON* eaf = cJSON_GetObjectItem(emoji, "eaf");
+            if (cJSON_IsString(name) && cJSON_IsString(file) && (NULL == eaf)) {
+                if (!assets->GetAssetData(file->valuestring, ptr, size)) {
+                    ESP_LOGE(TAG, "Emoji %s image file %s is not found", name->valuestring, file->valuestring);
+                    continue;
+                }
+                custom_emoji_collection->AddEmoji(name->valuestring, new LvglRawImage(ptr, size));
+            }
+        }
+    }
+    return custom_emoji_collection;
+}
+
+bool ApplyThemeSkinFromIndex(Assets* assets, LvglTheme* theme, cJSON* skin) {
+    if (!cJSON_IsObject(skin) || theme == nullptr) {
+        return true;
+    }
+
+    void* ptr = nullptr;
+    size_t size = 0;
+    cJSON* text_color = cJSON_GetObjectItem(skin, "text_color");
+    cJSON* background_color = cJSON_GetObjectItem(skin, "background_color");
+    cJSON* background_image = cJSON_GetObjectItem(skin, "background_image");
+    cJSON* emoji_collection = cJSON_GetObjectItem(skin, "emoji_collection");
+
+    if (cJSON_IsString(text_color)) {
+        theme->set_text_color(LvglTheme::ParseColor(text_color->valuestring));
+    }
+    if (cJSON_IsString(background_color)) {
+        theme->set_background_color(LvglTheme::ParseColor(background_color->valuestring));
+        theme->set_chat_background_color(LvglTheme::ParseColor(background_color->valuestring));
+    }
+    if (cJSON_IsString(background_image)) {
+        if (!assets->GetAssetData(background_image->valuestring, ptr, size)) {
+            ESP_LOGE(TAG, "The background image file %s is not found", background_image->valuestring);
+            return false;
+        }
+        auto background = CreateBackgroundImageFromAsset(background_image->valuestring, ptr, size);
+        theme->set_background_image(background);
+    }
+    auto theme_emoji_collection = LoadEmojiCollectionFromIndex(assets, emoji_collection);
+    if (theme_emoji_collection != nullptr) {
+        theme->set_emoji_collection(theme_emoji_collection);
+    }
+    return true;
 }
 } // namespace
 #endif
@@ -156,8 +229,9 @@ bool Assets::LoadSrmodelsFromIndex(Assets* assets, cJSON* root) {
 #if HAVE_LVGL
 uint32_t Assets::LvglStrategy::CalculateChecksum(const char* data, uint32_t length) {
     uint32_t checksum = 0;
+    const auto* bytes = reinterpret_cast<const uint8_t*>(data);
     for (uint32_t i = 0; i < length; i++) {
-        checksum += data[i];
+        checksum += bytes[i];
     }
     return checksum & 0xFFFF;
 }
@@ -202,8 +276,55 @@ bool Assets::LvglStrategy::InitializePartition(Assets* assets) {
     ESP_LOGI(TAG, "The checksum calculation time is %d ms", int((end_time - start_time) / 1000));
 
     if (calculated_checksum != stored_chksum) {
-        ESP_LOGE(TAG, "The calculated checksum (0x%lx) does not match the stored checksum (0x%lx)", calculated_checksum, stored_chksum);
-        return false;
+        ESP_LOGW(TAG, "The mmap checksum (0x%lx) does not match the stored checksum (0x%lx), retrying with esp_partition_read",
+                 calculated_checksum, stored_chksum);
+
+        uint8_t buffer[4096];
+        uint32_t read_checksum = 0;
+        uint32_t remaining = stored_len;
+        uint32_t offset = 12;
+        auto read_start_time = esp_timer_get_time();
+        while (remaining > 0) {
+            size_t chunk_size = remaining > sizeof(buffer) ? sizeof(buffer) : remaining;
+            err = esp_partition_read(assets->partition_, offset, buffer, chunk_size);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to read assets partition for checksum at offset 0x%lx: %s",
+                         offset, esp_err_to_name(err));
+                return false;
+            }
+            for (size_t i = 0; i < chunk_size; i++) {
+                read_checksum += buffer[i];
+            }
+            offset += chunk_size;
+            remaining -= chunk_size;
+        }
+        read_checksum &= 0xFFFF;
+        auto read_end_time = esp_timer_get_time();
+        ESP_LOGI(TAG, "The partition-read checksum calculation time is %d ms",
+                 int((read_end_time - read_start_time) / 1000));
+
+        if (read_checksum != stored_chksum) {
+            ESP_LOGE(TAG, "The partition-read checksum (0x%lx) does not match the stored checksum (0x%lx)",
+                     read_checksum, stored_chksum);
+            return false;
+        }
+        ESP_LOGW(TAG, "The mmap checksum failed but partition-read checksum passed; loading assets into PSRAM");
+
+        const size_t copy_size = stored_len + 12;
+        partition_copy_root_ = static_cast<char*>(heap_caps_malloc(copy_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (partition_copy_root_ == nullptr) {
+            ESP_LOGE(TAG, "Failed to allocate %u bytes for assets partition copy", static_cast<unsigned>(copy_size));
+            return false;
+        }
+        err = esp_partition_read(assets->partition_, 0, partition_copy_root_, copy_size);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to copy assets partition into PSRAM: %s", esp_err_to_name(err));
+            heap_caps_free(partition_copy_root_);
+            partition_copy_root_ = nullptr;
+            return false;
+        }
+        mmap_root_ = partition_copy_root_;
+        ESP_LOGI(TAG, "Assets partition copied into PSRAM: %u bytes", static_cast<unsigned>(copy_size));
     }
 
     checksum_valid_ = true;
@@ -220,6 +341,10 @@ bool Assets::LvglStrategy::InitializePartition(Assets* assets) {
 }
 
 void Assets::LvglStrategy::UnApplyPartition(Assets* assets) {
+    if (partition_copy_root_ != nullptr) {
+        heap_caps_free(partition_copy_root_);
+        partition_copy_root_ = nullptr;
+    }
     if (mmap_handle_ != 0) {
         esp_partition_munmap(mmap_handle_);
         mmap_handle_ = 0;
@@ -295,24 +420,8 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
     }
 
     cJSON* emoji_collection = cJSON_GetObjectItem(root, "emoji_collection");
-    if (cJSON_IsArray(emoji_collection)) {
-        auto custom_emoji_collection = std::make_shared<EmojiCollection>();
-        int emoji_count = cJSON_GetArraySize(emoji_collection);
-        for (int i = 0; i < emoji_count; i++) {
-            cJSON* emoji = cJSON_GetArrayItem(emoji_collection, i);
-            if (cJSON_IsObject(emoji)) {
-                cJSON* name = cJSON_GetObjectItem(emoji, "name");
-                cJSON* file = cJSON_GetObjectItem(emoji, "file");
-                cJSON* eaf = cJSON_GetObjectItem(emoji, "eaf");
-                if (cJSON_IsString(name) && cJSON_IsString(file) && (NULL== eaf)) {
-                    if (!assets->GetAssetData(file->valuestring, ptr, size)) {
-                        ESP_LOGE(TAG, "Emoji %s image file %s is not found", name->valuestring, file->valuestring);
-                        continue;
-                    }
-                    custom_emoji_collection->AddEmoji(name->valuestring, new LvglRawImage(ptr, size));
-                }
-            }
-        }
+    auto custom_emoji_collection = LoadEmojiCollectionFromIndex(assets, emoji_collection);
+    if (custom_emoji_collection != nullptr) {
         if (light_theme != nullptr) {
             light_theme->set_emoji_collection(custom_emoji_collection);
         }
@@ -324,46 +433,12 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
     cJSON* skin = cJSON_GetObjectItem(root, "skin");
     if (cJSON_IsObject(skin)) {
         cJSON* light_skin = cJSON_GetObjectItem(skin, "light");
-        if (cJSON_IsObject(light_skin) && light_theme != nullptr) {
-            cJSON* text_color = cJSON_GetObjectItem(light_skin, "text_color");
-            cJSON* background_color = cJSON_GetObjectItem(light_skin, "background_color");
-            cJSON* background_image = cJSON_GetObjectItem(light_skin, "background_image");
-            if (cJSON_IsString(text_color)) {
-                light_theme->set_text_color(LvglTheme::ParseColor(text_color->valuestring));
-            }
-            if (cJSON_IsString(background_color)) {
-                light_theme->set_background_color(LvglTheme::ParseColor(background_color->valuestring));
-                light_theme->set_chat_background_color(LvglTheme::ParseColor(background_color->valuestring));
-            }
-            if (cJSON_IsString(background_image)) {
-                if (!assets->GetAssetData(background_image->valuestring, ptr, size)) {
-                    ESP_LOGE(TAG, "The background image file %s is not found", background_image->valuestring);
-                    return false;
-                }
-                auto background = CreateBackgroundImageFromAsset(background_image->valuestring, ptr, size);
-                light_theme->set_background_image(background);
-            }
+        if (!ApplyThemeSkinFromIndex(assets, light_theme, light_skin)) {
+            return false;
         }
         cJSON* dark_skin = cJSON_GetObjectItem(skin, "dark");
-        if (cJSON_IsObject(dark_skin) && dark_theme != nullptr) {
-            cJSON* text_color = cJSON_GetObjectItem(dark_skin, "text_color");
-            cJSON* background_color = cJSON_GetObjectItem(dark_skin, "background_color");
-            cJSON* background_image = cJSON_GetObjectItem(dark_skin, "background_image");
-            if (cJSON_IsString(text_color)) {
-                dark_theme->set_text_color(LvglTheme::ParseColor(text_color->valuestring));
-            }
-            if (cJSON_IsString(background_color)) {
-                dark_theme->set_background_color(LvglTheme::ParseColor(background_color->valuestring));
-                dark_theme->set_chat_background_color(LvglTheme::ParseColor(background_color->valuestring));
-            }
-            if (cJSON_IsString(background_image)) {
-                if (!assets->GetAssetData(background_image->valuestring, ptr, size)) {
-                    ESP_LOGE(TAG, "The background image file %s is not found", background_image->valuestring);
-                    return false;
-                }
-                auto background = CreateBackgroundImageFromAsset(background_image->valuestring, ptr, size);
-                dark_theme->set_background_image(background);
-            }
+        if (!ApplyThemeSkinFromIndex(assets, dark_theme, dark_skin)) {
+            return false;
         }
     }
 

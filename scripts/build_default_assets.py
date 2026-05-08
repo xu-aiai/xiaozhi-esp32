@@ -215,7 +215,7 @@ def process_text_font(text_font_file, assets_dir):
     return None
 
 
-def process_emoji_collection(emoji_collection_dir, assets_dir):
+def process_emoji_collection(emoji_collection_dir, assets_dir, asset_prefix=""):
     """Process emoji_collection parameter"""
     if not emoji_collection_dir:
         return []
@@ -235,22 +235,17 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
         "buxue": ["thinking", "confused", "embarrassed"]
     }
 
-    # A project-local custom GIF named default_emoji.gif is treated as the
-    # default visual for every emotion while still being stored in assets.bin.
-    custom_default_emoji_aliases = [
-        "neutral", "happy", "laughing", "funny", "sad", "angry", "crying", "loving",
-        "embarrassed", "surprised", "shocked", "thinking", "winking", "cool", "relaxed",
-        "delicious", "kissy", "confident", "sleepy", "silly", "confused", "gear", "search",
-        "microchip_ai", "listening", "speaking", "connecting", "idle"
-    ]
-    
     # Copy each image from input directory to build/assets directory
     for root, dirs, files in os.walk(emoji_collection_dir):
-        for file in files:
+        dirs.sort()
+        for file in sorted(files):
+            if file.startswith('.'):
+                continue
             if file.lower().endswith(('.png', '.gif')):
                 # Copy file
                 src_file = os.path.join(root, file)
-                dst_file = os.path.join(assets_dir, file)
+                asset_file = f"{asset_prefix}{file}" if asset_prefix else file
+                dst_file = os.path.join(assets_dir, asset_file)
                 if copy_file(src_file, dst_file):
                     # Get filename without extension
                     filename_without_ext = os.path.splitext(file)[0]
@@ -258,7 +253,7 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
                     # Add main emoji entry
                     emoji_list.append({
                         "name": filename_without_ext,
-                        "file": file
+                        "file": asset_file
                     })
                     
                     # Add aliases for otto-gif emojis
@@ -266,20 +261,13 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
                         for alias in otto_gif_aliases[filename_without_ext]:
                             emoji_list.append({
                                 "name": alias,
-                                "file": file
+                                "file": asset_file
                             })
-                    elif filename_without_ext == "default_emoji":
-                        for alias in custom_default_emoji_aliases:
-                            if alias != filename_without_ext:
-                                emoji_list.append({
-                                    "name": alias,
-                                    "file": file
-                                })
     
     return emoji_list
 
 
-def process_extra_files(extra_files_dir, assets_dir):
+def process_extra_files(extra_files_dir, assets_dir, asset_prefix=""):
     """Process default_assets_extra_files parameter"""
     if not extra_files_dir:
         return []
@@ -299,9 +287,10 @@ def process_extra_files(extra_files_dir, assets_dir):
                 
             # Copy file
             src_file = os.path.join(root, file)
-            dst_file = os.path.join(assets_dir, file)
+            asset_file = f"{asset_prefix}{file}" if asset_prefix else file
+            dst_file = os.path.join(assets_dir, asset_file)
             if copy_file(src_file, dst_file):
-                extra_files_list.append(file)
+                extra_files_list.append(asset_file)
     
     if extra_files_list:
         print(f"Processed {len(extra_files_list)} extra files from: {extra_files_dir}")
@@ -309,7 +298,7 @@ def process_extra_files(extra_files_dir, assets_dir):
     return extra_files_list
 
 
-def generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra_files=None, multinet_model_info=None):
+def generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra_files=None, multinet_model_info=None, theme_assets=None):
     """Generate index.json file"""
     index_data = {
         "version": 1
@@ -335,6 +324,15 @@ def generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra
                     "background_image": "xcmg_background.rgb565"
                 }
             }
+
+    if theme_assets:
+        skin = index_data.setdefault("skin", {})
+        for theme_name, assets in theme_assets.items():
+            theme_skin = skin.setdefault(theme_name, {})
+            if assets.get("background_image"):
+                theme_skin["background_image"] = assets["background_image"]
+            if assets.get("emoji_collection"):
+                theme_skin["emoji_collection"] = assets["emoji_collection"]
     
     if multinet_model_info:
         index_data["multinet_model"] = multinet_model_info
@@ -775,7 +773,10 @@ def get_emoji_collection_path(default_emoji_collection, xiaozhi_fonts_path, proj
     return None
 
 
-def build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font_path, emoji_collection_path, extra_files_path, output_path, multinet_model_info=None):
+def build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font_path, emoji_collection_path,
+                            extra_files_path, output_path, multinet_model_info=None,
+                            light_emoji_collection_path=None, dark_emoji_collection_path=None,
+                            light_extra_files_path=None, dark_extra_files_path=None):
     """
     Build assets using integrated functions (no external dependencies)
     """
@@ -797,9 +798,24 @@ def build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font
         text_font = process_text_font(text_font_path, assets_dir) if text_font_path else None
         emoji_collection = process_emoji_collection(emoji_collection_path, assets_dir) if emoji_collection_path else None
         extra_files = process_extra_files(extra_files_path, assets_dir) if extra_files_path else None
+        theme_assets = {}
+        if light_emoji_collection_path:
+            theme_assets.setdefault("light", {})["emoji_collection"] = process_emoji_collection(
+                light_emoji_collection_path, assets_dir, "light_")
+        if dark_emoji_collection_path:
+            theme_assets.setdefault("dark", {})["emoji_collection"] = process_emoji_collection(
+                dark_emoji_collection_path, assets_dir, "dark_")
+        if light_extra_files_path:
+            light_extra_files = process_extra_files(light_extra_files_path, assets_dir, "light_")
+            if light_extra_files:
+                theme_assets.setdefault("light", {})["background_image"] = light_extra_files[0]
+        if dark_extra_files_path:
+            dark_extra_files = process_extra_files(dark_extra_files_path, assets_dir, "dark_")
+            if dark_extra_files:
+                theme_assets.setdefault("dark", {})["background_image"] = dark_extra_files[0]
         
         # Generate index.json
-        generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra_files, multinet_model_info)
+        generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra_files, multinet_model_info, theme_assets)
         
         # Generate config.json for packing
         config_path = generate_config_json(temp_build_dir, assets_dir)
@@ -845,6 +861,10 @@ def main():
     parser.add_argument('--esp_sr_model_path', help='Path to ESP-SR model directory')
     parser.add_argument('--xiaozhi_fonts_path', help='Path to xiaozhi-fonts component directory')
     parser.add_argument('--extra_files', help='Path to extra files directory to be included in assets')
+    parser.add_argument('--light_emoji_collection', help='Light theme emoji collection directory')
+    parser.add_argument('--dark_emoji_collection', help='Dark theme emoji collection directory')
+    parser.add_argument('--light_extra_files', help='Light theme extra files directory')
+    parser.add_argument('--dark_extra_files', help='Dark theme extra files directory')
     
     args = parser.parse_args()
     
@@ -864,6 +884,10 @@ def main():
     print(f"  sdkconfig: {args.sdkconfig}")
     print(f"  builtin_text_font: {args.builtin_text_font}")
     print(f"  emoji_collection: {args.emoji_collection}")
+    print(f"  light_emoji_collection: {args.light_emoji_collection}")
+    print(f"  dark_emoji_collection: {args.dark_emoji_collection}")
+    print(f"  light_extra_files: {args.light_extra_files}")
+    print(f"  dark_extra_files: {args.dark_extra_files}")
     print(f"  output: {args.output}")
     
     # Read wake word type configuration from sdkconfig
@@ -939,7 +963,7 @@ def main():
         print(f"  wake word threshold: {custom_wake_word_config['threshold']}")
     
     # Check if we have anything to build
-    if not wakenet_model_paths and not multinet_model_paths and not text_font_path and not emoji_collection_path and not extra_files_path and not multinet_model_info:
+    if not wakenet_model_paths and not multinet_model_paths and not text_font_path and not emoji_collection_path and not extra_files_path and not multinet_model_info and not args.light_emoji_collection and not args.dark_emoji_collection and not args.light_extra_files and not args.dark_extra_files:
         print("Warning: No assets to build (no SR models, text font, emoji collection, extra files, or custom wake word)")
         # Create an empty assets.bin file
         os.makedirs(os.path.dirname(args.output), exist_ok=True)
@@ -949,8 +973,10 @@ def main():
         return
     
     # Build the assets
-    success = build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font_path, emoji_collection_path, 
-                                     extra_files_path, args.output, multinet_model_info)
+    success = build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font_path, emoji_collection_path,
+                                     extra_files_path, args.output, multinet_model_info,
+                                     args.light_emoji_collection, args.dark_emoji_collection,
+                                     args.light_extra_files, args.dark_extra_files)
     
     if not success:
         sys.exit(1)

@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <memory>
+#include <string>
 
 #define PREVIEW_IMAGE_DURATION_MS 5000
 
@@ -31,6 +32,8 @@ protected:
     lv_obj_t* emoji_label_ = nullptr;
     lv_obj_t* emoji_image_ = nullptr;
     std::unique_ptr<LvglGif> gif_controller_ = nullptr;
+    std::string current_emotion_ = "neutral";
+    bool emotion_animation_paused_ = false;
     lv_obj_t* emoji_box_ = nullptr;
     lv_obj_t* chat_message_shadow_label_ = nullptr;
     lv_obj_t* chat_message_label_ = nullptr;
@@ -49,6 +52,7 @@ protected:
 public:
     ~LcdDisplay();
     virtual void SetEmotion(const char* emotion) override;
+    virtual void SetEmotionAnimationPaused(bool paused) override;
     virtual void SetChatMessage(const char* role, const char* content) override;
     virtual void ClearChatMessages() override;
     virtual void SetPreviewImage(std::unique_ptr<LvglImage> image) override;

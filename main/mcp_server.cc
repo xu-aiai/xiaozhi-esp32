@@ -90,9 +90,11 @@ void McpServer::AddCommonTools() {
                 auto& theme_manager = LvglThemeManager::GetInstance();
                 auto theme = theme_manager.GetTheme(theme_name);
                 if (theme != nullptr) {
+                    ESP_LOGI(TAG, "screen.set_theme requested: %s", theme_name.c_str());
                     display->SetTheme(theme);
                     return true;
                 }
+                ESP_LOGW(TAG, "screen.set_theme rejected unknown theme: %s", theme_name.c_str());
                 return false;
             });
     }
@@ -166,6 +168,30 @@ void McpServer::AddUserOnlyTools() {
             });
             
             return true;
+        });
+
+    AddUserOnlyTool("self.ota.set_url", "Set the OTA version check URL. This controls where the device checks for firmware updates on startup.",
+        PropertyList({
+            Property("url", kPropertyTypeString, "The OTA version check URL")
+        }),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto url = properties["url"].value<std::string>();
+            Settings settings("wifi", true);
+            settings.SetString("ota_url", url);
+            ESP_LOGI(TAG, "OTA check URL saved to NVS wifi/ota_url: %s", url.c_str());
+            return true;
+        });
+
+    AddUserOnlyTool("self.ota.get_url", "Get the current OTA version check URL.",
+        PropertyList(),
+        [](const PropertyList& properties) -> ReturnValue {
+            Settings settings("wifi", false);
+            auto url = settings.GetString("ota_url");
+            if (url.empty()) {
+                url = CONFIG_OTA_URL;
+            }
+            ESP_LOGI(TAG, "Current OTA check URL: %s", url.c_str());
+            return url;
         });
 
     // Display control
@@ -295,6 +321,7 @@ void McpServer::AddUserOnlyTools() {
                 auto url = properties["url"].value<std::string>();
                 Settings settings("assets", true);
                 settings.SetString("download_url", url);
+                ESP_LOGI(TAG, "Assets download URL saved to NVS assets/download_url: %s", url.c_str());
                 return true;
             });
     }

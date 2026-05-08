@@ -49,6 +49,9 @@ void Display::ClearChatMessages() {
     // Default empty implementation, override in subclasses if needed
 }
 
+void Display::SetEmotionAnimationPaused(bool paused) {
+}
+
 void Display::SetTheme(Theme* theme) {
     current_theme_ = theme;
     Settings settings("display", true);
