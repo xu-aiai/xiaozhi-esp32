@@ -65,6 +65,11 @@ void Application::Initialize() {
     // Setup the display
     auto display = board.GetDisplay();
     display->SetupUI();
+    auto& assets = Assets::GetInstance();
+    if (assets.partition_valid()) {
+        assets.Apply();
+    }
+    display->SetBackgroundState(BackgroundState::Idle);
 #if CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
     // 10.1 寸 MIPI 屏先完成首帧 UI 刷新，再打开背光，避免用户看到白屏逐步刷新。
     vTaskDelay(pdMS_TO_TICKS(150));
@@ -864,6 +869,10 @@ void Application::HandleStateChangedEvent() {
     auto display = board.GetDisplay();
     auto led = board.GetLed();
     led->OnStateChanged();
+
+    const bool use_active_background =
+        new_state == kDeviceStateListening || new_state == kDeviceStateSpeaking;
+    display->SetBackgroundState(use_active_background ? BackgroundState::Active : BackgroundState::Idle);
     
     switch (new_state) {
         case kDeviceStateUnknown:

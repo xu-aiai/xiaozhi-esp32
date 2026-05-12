@@ -19,6 +19,8 @@ import json
 import struct
 from datetime import datetime
 
+MAX_ASSET_NAME_LEN = 32
+
 
 # =============================================================================
 # Pack model functions (from pack_model.py)
@@ -280,7 +282,8 @@ def process_extra_files(extra_files_dir, assets_dir, asset_prefix=""):
     
     # Copy each file from input directory to build/assets directory
     for root, dirs, files in os.walk(extra_files_dir):
-        for file in files:
+        dirs.sort()
+        for file in sorted(files):
             # Skip hidden files and directories
             if file.startswith('.'):
                 continue
@@ -288,6 +291,9 @@ def process_extra_files(extra_files_dir, assets_dir, asset_prefix=""):
             # Copy file
             src_file = os.path.join(root, file)
             asset_file = f"{asset_prefix}{file}" if asset_prefix else file
+            if len(asset_file.encode('utf-8')) >= MAX_ASSET_NAME_LEN:
+                print(f"Warning: Skip extra file with name not shorter than {MAX_ASSET_NAME_LEN} bytes: {asset_file}")
+                continue
             dst_file = os.path.join(assets_dir, asset_file)
             if copy_file(src_file, dst_file):
                 extra_files_list.append(asset_file)
@@ -808,11 +814,13 @@ def build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font
         if light_extra_files_path:
             light_extra_files = process_extra_files(light_extra_files_path, assets_dir, "light_")
             if light_extra_files:
-                theme_assets.setdefault("light", {})["background_image"] = light_extra_files[0]
+                default_background = next((name for name in light_extra_files if name.endswith("xcmg_background.rgb565")), None)
+                theme_assets.setdefault("light", {})["background_image"] = default_background or light_extra_files[0]
         if dark_extra_files_path:
             dark_extra_files = process_extra_files(dark_extra_files_path, assets_dir, "dark_")
             if dark_extra_files:
-                theme_assets.setdefault("dark", {})["background_image"] = dark_extra_files[0]
+                default_background = next((name for name in dark_extra_files if name.endswith("xcmg_background.rgb565")), None)
+                theme_assets.setdefault("dark", {})["background_image"] = default_background or dark_extra_files[0]
         
         # Generate index.json
         generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra_files, multinet_model_info, theme_assets)

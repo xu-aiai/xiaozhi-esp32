@@ -24,6 +24,8 @@
 namespace {
 constexpr int kCustomBackgroundWidth = 400;
 constexpr int kCustomBackgroundHeight = 640;
+std::string g_cached_text_font_asset;
+std::shared_ptr<LvglFont> g_cached_text_font;
 
 class Rgb565BackgroundImage : public LvglImage {
 public:
@@ -341,6 +343,8 @@ bool Assets::LvglStrategy::InitializePartition(Assets* assets) {
 }
 
 void Assets::LvglStrategy::UnApplyPartition(Assets* assets) {
+    g_cached_text_font.reset();
+    g_cached_text_font_asset.clear();
     if (partition_copy_root_ != nullptr) {
         heap_caps_free(partition_copy_root_);
         partition_copy_root_ = nullptr;
@@ -403,7 +407,11 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
     if (cJSON_IsString(font)) {
         std::string fonts_text_file = font->valuestring;
         if (assets->GetAssetData(fonts_text_file, ptr, size)) {
-            auto text_font = std::make_shared<LvglCBinFont>(ptr);
+            if (g_cached_text_font == nullptr || g_cached_text_font_asset != fonts_text_file) {
+                g_cached_text_font = std::make_shared<LvglCBinFont>(ptr);
+                g_cached_text_font_asset = fonts_text_file;
+            }
+            auto text_font = g_cached_text_font;
             if (text_font->font() == nullptr) {
                 ESP_LOGE(TAG, "Failed to load fonts.bin");
                 return false;

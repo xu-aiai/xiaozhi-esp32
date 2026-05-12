@@ -39,9 +39,13 @@ protected:
     lv_obj_t* chat_message_label_ = nullptr;
     esp_timer_handle_t preview_timer_ = nullptr;
     std::unique_ptr<LvglImage> preview_image_cached_ = nullptr;
+    std::shared_ptr<LvglImage> state_background_image_override_ = nullptr;
     bool hide_subtitle_ = false;  // Control whether to hide chat messages/subtitles
+    BackgroundState background_state_ = BackgroundState::Default;
 
     void InitializeLcdThemes();
+    void RefreshBackgroundImage();
+    void RefreshStateBackgroundOverride();
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
 
@@ -55,6 +59,7 @@ public:
     virtual void SetEmotionAnimationPaused(bool paused) override;
     virtual void SetChatMessage(const char* role, const char* content) override;
     virtual void ClearChatMessages() override;
+    virtual void SetBackgroundState(BackgroundState state) override;
     virtual void SetPreviewImage(std::unique_ptr<LvglImage> image) override;
     virtual void SetupUI() override;
     // Add theme switching function

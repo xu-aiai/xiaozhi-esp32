@@ -25,6 +25,12 @@ private:
     std::string name_;
 };
 
+enum class BackgroundState {
+    Default,
+    Idle,
+    Active,
+};
+
 class Display {
 public:
     Display();
@@ -37,6 +43,7 @@ public:
     virtual void SetChatMessage(const char* role, const char* content);
     virtual void ClearChatMessages();
     virtual void SetEmotionAnimationPaused(bool paused);
+    virtual void SetBackgroundState(BackgroundState state);
     virtual void SetTheme(Theme* theme);
     virtual Theme* GetTheme() { return current_theme_; }
     virtual void UpdateStatusBar(bool update_all = false);
