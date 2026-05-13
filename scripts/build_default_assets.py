@@ -650,6 +650,40 @@ def read_custom_wake_word_from_sdkconfig(sdkconfig_path):
     return None
 
 
+def get_custom_wake_word_aliases(wake_word):
+    """
+    Return pronunciation-near aliases for known custom wake words.
+    The first item should remain the canonical wake word.
+    """
+    if not wake_word:
+        return []
+
+    normalized = wake_word.strip().lower()
+    aliases = [wake_word]
+
+    alias_map = {
+        "hi maia": [
+            "hi maya",
+            "hi mia",
+            "hi mic",
+            "hey maia",
+            "hey maya",
+            "hey mia",
+            "hey mic",
+            "hello maia",
+            "hello maya",
+            "hello mia",
+            "hello mic",
+        ],
+    }
+
+    for alias in alias_map.get(normalized, []):
+        if alias not in aliases:
+            aliases.append(alias)
+
+    return aliases
+
+
 def get_language_from_multinet_models(multinet_models):
     """
     Determine language from multinet model names
@@ -952,6 +986,7 @@ def main():
     if custom_wake_word_config and multinet_model_paths:
         # Determine language from multinet models
         language = get_language_from_multinet_models(multinet_model_names)
+        wake_word_aliases = get_custom_wake_word_aliases(custom_wake_word_config['wake_word'])
         
         # Build multinet_model info structure
         multinet_model_info = {
@@ -960,13 +995,15 @@ def main():
             "threshold": custom_wake_word_config['threshold'],
             "commands": [
                 {
-                    "command": custom_wake_word_config['wake_word'],
+                    "command": alias,
                     "text": custom_wake_word_config['display'],
                     "action": "wake"
                 }
+                for alias in wake_word_aliases
             ]
         }
         print(f"  custom wake word: {custom_wake_word_config['wake_word']} ({custom_wake_word_config['display']})")
+        print(f"  custom wake word aliases: {', '.join(wake_word_aliases)}")
         print(f"  wake word language: {language}")
         print(f"  wake word threshold: {custom_wake_word_config['threshold']}")
     

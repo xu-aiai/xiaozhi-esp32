@@ -44,6 +44,7 @@ public:
     virtual void ClearChatMessages();
     virtual void SetEmotionAnimationPaused(bool paused);
     virtual void SetBackgroundState(BackgroundState state);
+    virtual void SetHideSubtitle(bool hide);
     virtual void SetTheme(Theme* theme);
     virtual Theme* GetTheme() { return current_theme_; }
     virtual void UpdateStatusBar(bool update_all = false);

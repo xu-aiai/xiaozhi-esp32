@@ -55,6 +55,9 @@ void Display::SetEmotionAnimationPaused(bool paused) {
 void Display::SetBackgroundState(BackgroundState state) {
 }
 
+void Display::SetHideSubtitle(bool hide) {
+}
+
 void Display::SetTheme(Theme* theme) {
     current_theme_ = theme;
     Settings settings("display", true);

@@ -1244,13 +1244,13 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
     }
     const bool has_content = content != nullptr && content[0] != '\0';
     const char* message = has_content ? content : kDefaultChatMessage;
+    const bool is_default_message = strcmp(message, kDefaultChatMessage) == 0;
     lv_label_set_text(chat_message_label_, message);
     if (chat_message_shadow_label_ != nullptr) {
         lv_label_set_text(chat_message_shadow_label_, message);
     }
-    // Restore the default introduction when callers clear the chat text.
     if (bottom_bar_ != nullptr) {
-        if (hide_subtitle_) {
+        if (hide_subtitle_ && is_default_message) {
             lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
@@ -1647,9 +1647,14 @@ void LcdDisplay::SetHideSubtitle(bool hide) {
     // Immediately update UI visibility based on the setting
     if (bottom_bar_ != nullptr) {
         if (hide) {
-            lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+            const char* text = (chat_message_label_ != nullptr) ? lv_label_get_text(chat_message_label_) : nullptr;
+            const bool is_default_message = text != nullptr && strcmp(text, kDefaultChatMessage) == 0;
+            if (is_default_message) {
+                lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+            }
         } else {
-            // Only show if there is actual content to display
             const char* text = (chat_message_label_ != nullptr) ? lv_label_get_text(chat_message_label_) : nullptr;
             if (text != nullptr && text[0] != '\0') {
                 lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);

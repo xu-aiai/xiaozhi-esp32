@@ -873,6 +873,7 @@ void Application::HandleStateChangedEvent() {
     const bool use_active_background =
         new_state == kDeviceStateListening || new_state == kDeviceStateSpeaking;
     display->SetBackgroundState(use_active_background ? BackgroundState::Active : BackgroundState::Idle);
+    display->SetHideSubtitle(use_active_background);
     
     switch (new_state) {
         case kDeviceStateUnknown:
