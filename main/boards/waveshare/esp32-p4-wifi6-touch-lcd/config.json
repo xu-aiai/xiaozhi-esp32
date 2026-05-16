@@ -119,7 +119,7 @@
                 "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"hi maia\"",
                 "CONFIG_SR_MN_CN_NONE=n",
                 "CONFIG_SR_MN_CN_MULTINET7_QUANT=y",
-                "CONFIG_USE_DEVICE_AEC=y",
+                "CONFIG_USE_DEVICE_AEC=n",
                 "CONFIG_CAMERA_OV5647=y",
                 "CONFIG_CAMERA_OV5647_AUTO_DETECT_MIPI_INTERFACE_SENSOR=y",
                 "CONFIG_CAMERA_OV5647_MIPI_RAW8_800X800_50FPS=y",

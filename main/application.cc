@@ -809,22 +809,21 @@ void Application::HandleWakeWordDetectedEvent() {
         }
         // Channel already opened, continue directly
         ContinueWakeWordInvoke(wake_word);
-    } else if (state == kDeviceStateSpeaking || state == kDeviceStateListening) {
+    } else if (state == kDeviceStateSpeaking) {
+        ESP_LOGI(TAG, "Ignore wake word while speaking");
+        audio_service_.EnableVoiceProcessing(false);
+        audio_service_.EnableWakeWordDetection(false);
+        while (audio_service_.PopPacketFromSendQueue());
+    } else if (state == kDeviceStateListening) {
         AbortSpeaking(kAbortReasonWakeWordDetected);
         // Clear send queue to avoid sending residues to server
         while (audio_service_.PopPacketFromSendQueue());
 
-        if (state == kDeviceStateListening) {
-            protocol_->SendStartListening(GetDefaultListeningMode());
-            audio_service_.ResetDecoder();
-            audio_service_.PlaySound(Lang::Sounds::OGG_POPUP);
-            // Re-enable wake word detection as it was stopped by the detection itself
-            audio_service_.EnableWakeWordDetection(true);
-        } else {
-            // Play popup sound and start listening again
-            play_popup_on_listening_ = true;
-            SetListeningMode(GetDefaultListeningMode());
-        }
+        protocol_->SendStartListening(GetDefaultListeningMode());
+        audio_service_.ResetDecoder();
+        audio_service_.PlaySound(Lang::Sounds::OGG_POPUP);
+        // Re-enable wake word detection as it was stopped by the detection itself
+        audio_service_.EnableWakeWordDetection(true);
     } else if (state == kDeviceStateActivating) {
         // Restart the activation check if the wake word is detected during activation
         SetDeviceState(kDeviceStateIdle);
@@ -927,11 +926,8 @@ void Application::HandleStateChangedEvent() {
             display->SetEmotionAnimationPaused(true);
             display->SetStatus(Lang::Strings::SPEAKING);
 
-            if (listening_mode_ != kListeningModeRealtime) {
-                audio_service_.EnableVoiceProcessing(false);
-                // Only AFE wake word can be detected in speaking mode
-                audio_service_.EnableWakeWordDetection(audio_service_.IsAfeWakeWord());
-            }
+            audio_service_.EnableVoiceProcessing(false);
+            audio_service_.EnableWakeWordDetection(false);
             audio_service_.ResetDecoder();
             break;
         case kDeviceStateWifiConfiguring:
@@ -1062,9 +1058,7 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
         // Channel already opened, continue directly
         ContinueWakeWordInvoke(wake_word);
     } else if (state == kDeviceStateSpeaking) {
-        Schedule([this]() {
-            AbortSpeaking(kAbortReasonNone);
-        });
+        ESP_LOGI(TAG, "Ignore wake word invoke while speaking");
     } else if (state == kDeviceStateListening) {   
         Schedule([this]() {
             if (protocol_) {
